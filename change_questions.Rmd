@@ -1,0 +1,365 @@
+
+
+```{r}
+
+library(dplyr) 
+library(haven)
+library(readxl)
+library(ggplot2)
+library(tidyr)
+```
+
+```{r}
+
+five_wave_test <- read_sav("/Users/dmitry/Downloads/WV5_Data_Russian_Federation_Spss_v20201117.sav")
+six_wave_test <- read_sav("/Users/dmitry/Downloads/WV6_Data_Russian_Federation_Spss_v20201117.sav")
+seven_wave_test <- read_excel("/Users/dmitry/Downloads/F00013215-WVS_Wave_7_Russian_Federation_Excel_v5.0.xlsx")
+```
+
+```{r}
+
+five_wave_test_cleaned <- five_wave_test %>% select(V44) %>% 
+  filter(!is.na(V44)) %>%
+  mutate(wave = 5, V44 = as.double(V44))
+colnames(five_wave_test_cleaned) <- c('answer', 'wave') 
+
+six_wave_test_cleaned <- six_wave_test %>% select(V45) %>% 
+  filter(!is.na(V45)) %>%
+  mutate(wave = 6, V45 = as.double(V45))
+colnames(six_wave_test_cleaned) <- c('answer', 'wave') 
+
+seven_wave_test_cleaned <- seven_wave_test %>%
+  select("Q33: Jobs scarce: Men should have more right to a job than women") %>%
+  mutate(wave = 7)
+colnames(seven_wave_test_cleaned) <- c('answer', 'wave') 
+seven_wave_test_cleaned <- seven_wave_test_cleaned %>% 
+  mutate(answer = as.double(answer)) %>% filter(!is.na(answer)) 
+
+waves_cleaned <- full_join(five_wave_test_cleaned, six_wave_test_cleaned, by = c("wave", "answer")) %>%
+  full_join(seven_wave_test_cleaned, by = c("wave", "answer"))
+```
+
+```{r}
+
+options(dplyr.summarise.inform = FALSE)
+
+waves_summarised <- waves_cleaned %>%
+  group_by(wave, answer) %>%
+  summarise(agree = sum(answer == 1),
+            neither = sum(answer == 2),
+            disagree = sum(answer == 3)) %>%
+  filter(!is.na(agree), !is.na(neither), !is.na(disagree)) %>%
+  mutate(agree = sum(agree), neither = sum(neither), disagree = sum(disagree)) %>%
+  distinct(agree, neither, disagree) %>%
+  group_by(wave) %>%
+  mutate(answers_sum = sum(agree + neither + disagree)) %>%
+  mutate(agree = agree / (answers_sum / 100), 
+         neither = neither / (answers_sum / 100), 
+         disagree = disagree / (answers_sum / 100)) %>%
+  ungroup() %>%  
+  select(-answers_sum) %>%
+  arrange(wave)
+
+waves_summarised <- pivot_longer(waves_summarised, cols = c(agree, neither, disagree), names_to = "answer", values_to = "percent")
+```
+
+```{r}
+
+wave_5 <- waves_summarised %>% filter(wave == 5)
+wave_6 <- waves_summarised %>% filter(wave == 6)
+wave_7 <- waves_summarised %>% filter(wave == 7)
+
+ggplot(wave_5, aes(percent, answer)) + 
+  geom_bar(stat = "identity", fill = "#DDD6FE") +
+  labs(x = "Количество ответов (в %) респондентов",
+       y = "Вариант ответа",
+       title = "Варианты ответа на вопрос в % (5-я волна)",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) 
+
+ggplot(wave_6, aes(percent, answer)) + 
+  geom_bar(stat = "identity", fill = "#E9D5FF") +
+  labs(x = "Количество ответов (в %) респондентов",
+       y = "Вариант ответа",
+       title = "Варианты ответа на вопрос в % (6-я волна)",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) 
+
+ggplot(wave_7, aes(percent, answer)) + 
+  geom_bar(stat = "identity", fill = "#C7D2FE") +
+  labs(x = "Количество ответов (в %) респондентов",
+       y = "Вариант ответа",
+       title = "Варианты ответа на вопрос в % (7-я волна)",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) 
+
+waves_summarised %>%
+  ggplot(., aes(wave, percent, group = answer)) + 
+  scale_fill_manual(values=c("#99F6E4", "#FEF08A", "#93C5FD")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "Волна опроса",
+       y = "Процент",
+       title = "Динамика изменения ответов на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5))
+```
+
+```{r}
+
+waves_agree <- waves_summarised %>% filter(answer == "agree")
+waves_disagree <- waves_summarised %>% filter(answer == "disagree")
+waves_neither <- waves_summarised %>% filter(answer == "neither")
+
+ggplot(waves_agree, aes(wave, percent)) + 
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(x = "Волна опроса",
+       y = "Процент ответов 'согласен'",
+       title = "Изменение ответа 'согласен' в различных волнах",
+       subtitle = "когда рабочих мест не хватает, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+ggplot(waves_disagree, aes(wave, percent)) + 
+  geom_bar(stat = "identity", fill = "lightpink") +
+  labs(x = "Волна опроса",
+       y = "Процент ответов 'не согласен'",
+       title = "Изменение ответа 'не согласен' в различных волнах",
+       subtitle = "когда рабочих мест не хватает, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+ggplot(waves_neither, aes(wave, percent)) + 
+  geom_bar(stat = "identity", fill = "lightgrey") +
+  labs(x = "Волна опроса",
+       y = "Процент ответов 'ни то, ни другое' ",
+       title = "Изменение ответа 'ни то, ни другое' в различных волнах",
+       subtitle = "когда рабочих мест не хватает, мужчины должны иметь больше прав на работу, чем женщины") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+```{r}
+
+# данные о связи пола и ответов на вопрос
+wave7_summarised_sex <- seven_wave_test %>%
+  select("Q260: Sex", "Q33: Jobs scarce: Men should have more right to a job than women")
+
+colnames(wave7_summarised_sex) <- c("sex", "question") 
+
+wave7_summarised_sex <- wave7_summarised_sex %>%
+  mutate(sex = case_when(sex == 1 ~ "Male",
+                         sex == 2 ~ "Female",
+                         sex == -2 ~ NA,
+                         sex == -4 ~ NA,
+                         sex == -5 ~ NA),) %>%
+    filter(!is.na(sex), !is.na(question))
+
+wave7_summarised_sex <- wave7_summarised_sex %>%
+  group_by(question, sex) %>%
+  summarise(agree = sum(question == 1),
+            neither = sum(question == 2),
+            disagree = sum(question == 3)) %>%
+  filter(!is.na(agree), !is.na(neither), !is.na(disagree)) %>%
+  ungroup() %>%
+  select(-question) %>%
+  group_by(sex) %>%
+  mutate(answers_sum = sum(agree + neither + disagree)) %>%
+  mutate(agree = agree / (answers_sum / 100), 
+         neither = neither / (answers_sum / 100), 
+         disagree = disagree / (answers_sum / 100)) %>%
+  select(-answers_sum)
+
+wave7_summarised_sex <- pivot_longer(wave7_summarised_sex, cols = c(agree, neither, disagree), names_to = "answer", values_to = "percent")
+
+wave7_summarised_sex <- wave7_summarised_sex %>%
+  filter(percent != 0) %>%
+  arrange(desc(sex))
+
+# данные о связи возраста и ответов на вопрос
+wave7_summarised_age <- seven_wave_test %>%
+  select("Q262: Age", "Q33: Jobs scarce: Men should have more right to a job than women")
+
+colnames(wave7_summarised_age) <- c("age", "question") 
+
+wave7_summarised_age <- wave7_summarised_age %>%
+    filter(!is.na(age))
+
+wave7_summarised_age <- wave7_summarised_age %>%
+  group_by(question, age) %>%
+  summarise(agree = sum(question == 1),
+            neither = sum(question == 2),
+            disagree = sum(question == 3)) %>%
+  filter(!is.na(agree), !is.na(neither), !is.na(disagree)) %>%
+  ungroup() %>%
+  select(-question) %>%
+  group_by(age) %>%
+  mutate(answers_sum = sum(agree + neither + disagree)) %>%
+  mutate(agree = agree / (answers_sum / 100), 
+         neither = neither / (answers_sum / 100), 
+         disagree = disagree / (answers_sum / 100)) %>%
+  select(-answers_sum)
+
+wave7_summarised_age <- pivot_longer(wave7_summarised_age, cols = c(agree, neither, disagree), names_to = "answer", values_to = "percent")
+
+wave7_summarised_age <- wave7_summarised_age %>%
+  filter(percent != 0) %>%
+  arrange(age) 
+
+# данные о связи дохода и ответов на вопрос
+wave7_summarised_income <- seven_wave_test %>%
+  select("Q288R: Income level (Recoded)", "Q33: Jobs scarce: Men should have more right to a job than women")
+
+colnames(wave7_summarised_income) <- c("income", "question") 
+
+wave7_summarised_income <- wave7_summarised_income %>%
+  mutate(income = case_when(income == 1 ~ "Low",
+                            income == 2 ~ "Medium",
+                            income == 3 ~ "High",
+                            income == -1 ~ NA,
+                            income == -2 ~ NA,
+                            income == -4 ~ NA,
+                            income == -5 ~ NA,)) %>%
+  filter(!is.na(income))
+
+wave7_summarised_income <- wave7_summarised_income %>%
+  group_by(question, income) %>%
+  summarise(agree = sum(question == 1),
+            neither = sum(question == 2),
+            disagree = sum(question == 3)) %>%
+  filter(!is.na(agree), !is.na(neither), !is.na(disagree)) %>%
+  ungroup() %>%
+  select(-question) %>%
+  group_by(income) %>%
+  mutate(answers_sum = sum(agree + neither + disagree))%>%
+  mutate(agree = agree / (answers_sum / 100), 
+         neither = neither / (answers_sum / 100), 
+         disagree = disagree / (answers_sum / 100)) %>%
+  select(-answers_sum)
+
+wave7_summarised_income <- pivot_longer(wave7_summarised_income, cols = c(agree, neither, disagree), names_to = "answer", values_to = "percent")
+
+wave7_summarised_income <- wave7_summarised_income %>%
+  filter(percent != 0) %>%
+  arrange(income)
+
+# данные о связи образования и ответов на вопрос
+wave7_summarised_education <- seven_wave_test %>%
+  select("Q275A: Highest educational level: Respondent (country specific)", "Q33: Jobs scarce: Men should have more right to a job than women")
+
+colnames(wave7_summarised_education) <- c("education", "question") 
+
+wave7_summarised_education <- wave7_summarised_education %>%
+  mutate(education = case_when(education == 643001 ~ "No education",
+                               education == 643002 ~ "Primary school",
+                               education == 643003 ~ "Incomplete secondary",
+                               education == 643004 ~ "Complete secondary school",
+                               education == 643005 ~ "Primary professional education without secondary general",
+                               education == 643006 ~ "Primary professional education - with secondary general",
+                               education == 643007 ~ "Secondary professional education",
+                               education == 643008 ~ "Bachelor's degree",
+                               education == 643009 ~ "Master's degree",
+                               education == 643010 ~ "Higher by single-tier system",
+                               education == 643011 ~ "Academic degree")) %>%
+  filter(!is.na(education))
+
+wave7_summarised_education <- wave7_summarised_education %>%
+  group_by(question, education) %>%
+  summarise(agree = sum(question == 1),
+            neither = sum(question == 2),
+            disagree = sum(question == 3)) %>%
+  filter(!is.na(agree), !is.na(neither), !is.na(disagree)) %>%
+  ungroup() %>%
+  select(-question) %>%
+  group_by(education) %>%
+  mutate(answers_sum = sum(agree + neither + disagree)) %>%
+  mutate(agree = agree / (answers_sum / 100), 
+         neither = neither / (answers_sum / 100), 
+         disagree = disagree / (answers_sum / 100)) %>%
+  select(-answers_sum)
+
+wave7_summarised_education <- pivot_longer(wave7_summarised_education, cols = c(agree, neither, disagree), names_to = "answer", values_to = "percent")
+
+wave7_summarised_education <- wave7_summarised_education %>%
+  filter(percent != 0) %>%
+  arrange(education)
+```
+
+```{r}
+
+# связь между полом и ответами на вопрос
+wave7_summarised_sex %>%
+  ggplot(., aes(sex, percent, group = answer)) + 
+  scale_fill_manual(values=c("#67E8F9", "#D8B4FE", "#FAE8FF")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "Пол",
+       y = "Процент",
+       title = "Связь между полом респондента и ответом на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5))
+
+# связь между возрастом и ответами на вопрос
+wave7_summarised_age %>%
+  ggplot(., aes(age, percent, group = answer)) + 
+  scale_fill_manual(values=c("#67E8F9", "#D8B4FE", "#FAE8FF")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "Возраст",
+       y = "Процент",
+       title = "Связь между возрастом респондента и ответом на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5))
+
+# связь между доходом и ответами на вопрос
+wave7_summarised_income %>%
+  ggplot(., aes(income, percent, group = answer)) + 
+  scale_fill_manual(values=c("#67E8F9", "#D8B4FE", "#FAE8FF")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "Доход",
+       y = "Процент",
+       title = "Связь между доходом респондента и ответом на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5))
+
+# связь между образованием и ответами на вопрос
+wave7_summarised_education %>%
+  ggplot(., aes(education, percent, group = answer)) + 
+  scale_fill_manual(values=c("#67E8F9", "#D8B4FE", "#FAE8FF")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "Образование",
+       y = " ",
+       title = "Связь между образованием респондента и ответом на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5))
+
+# связь между образованием и ответами на вопрос (версия 2)
+wave7_summarised_education %>%
+  ggplot(., aes(0, percent, group = answer)) + 
+  scale_fill_manual(values=c("#67E8F9", "#D8B4FE", "#FAE8FF")) +
+  geom_col(aes(fill = answer)) +
+  labs(x = "",
+       y = "Процент",
+       title = "Связь между образованием респондента и ответом на вопрос",
+       subtitle = "при нехватке рабочих мест, мужчины должны иметь больше прав на работу, чем женщины") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5),
+             plot.subtitle = element_text(hjust = 0.5)) +
+  facet_wrap(vars(education))
+```
